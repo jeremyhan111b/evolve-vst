@@ -77,7 +77,7 @@ public:
         if (notes.empty())
         {
             g.setColour (EvolveColours::muted);
-            g.setFont (juce::Font (11.0f));
+            g.setFont (juce::Font(juce::FontOptions{}.withHeight(11.0f)));
             g.drawText ("No notes captured", getLocalBounds(), juce::Justification::centred);
             return;
         }
