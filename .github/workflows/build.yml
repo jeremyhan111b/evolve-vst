@@ -1,0 +1,139 @@
+name: Build EVOLVE VST
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-mac:
+    name: Build macOS (VST3 + AU)
+    runs-on: macos-14
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install CMake
+      uses: jwlawson/actions-setup-cmake@v2
+      with:
+        cmake-version: '3.27'
+
+    - name: Configure
+      run: |
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+
+    - name: Build
+      run: cmake --build build --config Release --parallel 4
+
+    - name: Sign and collect artifacts
+      run: |
+        mkdir -p artifacts/mac
+        find build -name "*.vst3" -exec cp -r {} artifacts/mac/ \;
+        find build -name "*.component" -exec cp -r {} artifacts/mac/ \;
+        # Ad-hoc sign with network entitlements
+        find artifacts/mac -name "*.vst3" -exec codesign --force --deep --sign - --entitlements Resources/EVOLVE.entitlements {} \;
+        find artifacts/mac -name "*.component" -exec codesign --force --deep --sign - --entitlements Resources/EVOLVE.entitlements {} \;
+
+    - name: Upload Mac artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: EVOLVE-Mac
+        path: artifacts/mac/
+        retention-days: 30
+
+  build-windows:
+    name: Build Windows (VST3)
+    runs-on: windows-2022
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install CMake
+      uses: jwlawson/actions-setup-cmake@v2
+      with:
+        cmake-version: '3.27'
+
+    - name: Configure
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: cmake --build build --config Release --parallel 4
+
+    - name: Collect artifacts
+      shell: powershell
+      run: |
+        New-Item -ItemType Directory -Force -Path artifacts/win
+        Get-ChildItem -Recurse -Filter "*.vst3" build | ForEach-Object {
+          $dest = Join-Path "artifacts/win" $_.Name
+          if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+          Copy-Item -Recurse $_.FullName $dest
+        }
+
+    - name: Upload Windows artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: EVOLVE-Windows
+        path: artifacts/win/
+        retention-days: 30
+
+  create-release:
+    name: Create Release
+    needs: [build-mac, build-windows]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+    - name: Download Mac artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: EVOLVE-Mac
+        path: release/mac
+
+    - name: Download Windows artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: EVOLVE-Windows
+        path: release/win
+
+    - name: Zip artifacts
+      run: |
+        cd release/mac && zip -r ../../EVOLVE-Mac.zip . && cd ../..
+        cd release/win && zip -r ../../EVOLVE-Windows.zip . && cd ../..
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ github.run_number }}
+        name: EVOLVE v${{ github.run_number }}
+        draft: false
+        prerelease: false
+        files: |
+          EVOLVE-Mac.zip
+          EVOLVE-Windows.zip
+        body: |
+          ## EVOLVE AI Melody Evolution Plugin
+
+          ### Installation
+
+          **Mac:**
+          1. Download `EVOLVE-Mac.zip`
+          2. Extract and copy `EVOLVE.vst3` to `~/Library/Audio/Plug-Ins/VST3/`
+          3. Copy `EVOLVE.component` to `~/Library/Audio/Plug-Ins/Components/`
+          4. Rescan plugins in Ableton (Preferences → Plugins)
+
+          **Windows:**
+          1. Download `EVOLVE-Windows.zip`
+          2. Extract and copy `EVOLVE.vst3` to `C:\Program Files\Common Files\VST3\`
+          3. Rescan plugins in Ableton (Preferences → Plugins)
+
+          ### First launch
+          Enter your Anthropic API key when prompted. Get one free at console.anthropic.com
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
