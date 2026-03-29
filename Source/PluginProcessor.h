@@ -48,13 +48,12 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     //==========================================================================
-    // Called from editor when user clicks "Capture"
-    void startCapture();
-    void stopCapture();
-    bool isCapturing() const { return capturing.load(); }
-
-    // Returns captured notes as JSON string
+    // Auto-capture: always listening, returns latest captured notes
     juce::String getCapturedNotesJSON() const;
+
+    // True when a complete loop pass has been captured and is ready
+    bool hasFreshCapture() const { return freshCapture.load(); }
+    void clearFreshCapture()     { freshCapture.store (false); }
 
     // Called from editor to play notes back out via MIDI
     void scheduleNotesForPlayback (const juce::String& notesJSON, double bpm);
@@ -77,15 +76,23 @@ public:
     bool   isPlaying = false;
 
 private:
-    std::atomic<bool>  capturing { false };
+    //── Auto-capture state ───────────────────────────────────────
+    // Notes being collected during the current loop pass
+    std::vector<CapturedNote> pendingNotes;
+    // Notes from the last completed loop pass (ready for editor)
     std::vector<CapturedNote> capturedNotes;
     juce::CriticalSection     noteLock;
 
-    // Notes currently sounding (note number -> start beat)
+    // Track active (held) notes for duration calculation
     struct ActiveNote { double startBeat; };
     std::map<int, ActiveNote> activeNotes;
 
-    // MIDI output queue for playback
+    // Loop detection
+    double prevBeat         = -1.0;
+    bool   wasPlaying       = false;
+    std::atomic<bool> freshCapture { false };
+
+    //── MIDI output queue for playback ───────────────────────────
     struct ScheduledNote { int pitch; double startSec; double endSec; };
     std::vector<ScheduledNote> scheduledNotes;
     double playbackStartTime = 0.0;
