@@ -29,10 +29,9 @@ private:
     juce::TextButton settingsBtn { "KEY" };
 
     //── Left panel ──────────────────────────────────────────────
-    juce::Label          seedLabel     { {}, "SEED CAPTURE" };
+    juce::Label          seedLabel     { {}, "SEED" };
     PianoRollDisplay     seedRoll;
     juce::Label          captureInfo;
-    juce::TextButton     captureBtn   { "CAPTURE LOOP" };
     juce::TextButton     hearSeedBtn  { "HEAR" };
     juce::TextButton     plantBtn     { "PLANT SEED" };
 
@@ -68,7 +67,6 @@ private:
     juce::String            selectedId;
     juce::String            evolveParam { "auto" };
     NoteList                seedNotes;
-    bool                    isCapturing = false;
 
     std::vector<std::unique_ptr<GenCard>>       genCards;
     std::vector<std::unique_ptr<juce::Label>>    treeLabels;
@@ -95,6 +93,7 @@ private:
     void setStatus (const juce::String& msg);
     void rebuildTree();
     void scrollTreeToBottom();
+    void checkForAutoCapture();
 
     juce::String uid();
     juce::String getLineageDesc (const juce::String& id);
