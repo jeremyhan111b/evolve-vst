@@ -46,13 +46,13 @@ public:
 
         // Gen number
         g.setColour (EvolveColours::muted);
-        g.setFont (juce::Font (10.0f, juce::Font::bold));
+        g.setFont (juce::Font(juce::FontOptions{}.withHeight(10.0f).withStyle("Bold")));
         g.drawText ("GEN " + juce::String(gen.genIndex),
                     22, 0, 42, headerH, juce::Justification::centredLeft);
 
         // Title
         g.setColour (EvolveColours::text);
-        g.setFont (juce::Font (11.0f));
+        g.setFont (juce::Font(juce::FontOptions{}.withHeight(11.0f)));
         g.drawText (gen.title, 68, 0, getWidth() - 80, headerH,
                     juce::Justification::centredLeft, true);
 
@@ -60,7 +60,7 @@ public:
         if (!gen.steps.empty())
         {
             g.setColour (EvolveColours::muted);
-            g.setFont (juce::Font (9.0f));
+            g.setFont (juce::Font(juce::FontOptions{}.withHeight(9.0f)));
             g.drawText (juce::String(gen.steps.size()) + "\u2736",
                         getWidth() - 32, 0, 28, headerH, juce::Justification::centredRight);
         }
@@ -132,7 +132,7 @@ private:
             addAndMakeVisible (titleLabel);
             addAndMakeVisible (hearBtn);
             addAndMakeVisible (plantBtn);
-            titleLabel.setFont (juce::Font (10.0f));
+            titleLabel.setFont (juce::Font(juce::FontOptions{}.withHeight(10.0f)));
             titleLabel.setColour (juce::Label::textColourId, EvolveColours::text);
         }
 
