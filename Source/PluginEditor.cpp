@@ -35,7 +35,7 @@ EvolveEditor::~EvolveEditor()
 void EvolveEditor::setupHeader()
 {
     logoLabel.setText ("EVOLVE", juce::dontSendNotification);
-    logoLabel.setFont (juce::Font (16.0f, juce::Font::bold));
+    logoLabel.setFont (juce::Font(juce::FontOptions{}.withHeight(16.0f).withStyle("Bold")));
     logoLabel.setColour (juce::Label::textColourId, EvolveColours::accent);
     addAndMakeVisible (logoLabel);
 
@@ -74,13 +74,13 @@ void EvolveEditor::setupHeader()
 //==============================================================================
 void EvolveEditor::setupLeftPanel()
 {
-    seedLabel.setFont (juce::Font (10.0f, juce::Font::bold));
+    seedLabel.setFont (juce::Font(juce::FontOptions{}.withHeight(10.0f).withStyle("Bold")));
     seedLabel.setColour (juce::Label::textColourId, EvolveColours::muted);
     addAndMakeVisible (seedLabel);
 
     addAndMakeVisible (seedRoll);
 
-    captureInfo.setFont (juce::Font (10.0f));
+    captureInfo.setFont (juce::Font(juce::FontOptions{}.withHeight(10.0f)));
     captureInfo.setColour (juce::Label::textColourId, EvolveColours::muted);
     captureInfo.setJustificationType (juce::Justification::centred);
     captureInfo.setText ("Set loop region in Ableton, then click CAPTURE LOOP",
@@ -123,7 +123,7 @@ void EvolveEditor::setupLeftPanel()
     plantBtn.onClick = [this]{ plantSeed(); };
     addAndMakeVisible (plantBtn);
 
-    evolveLabel.setFont (juce::Font (10.0f, juce::Font::bold));
+    evolveLabel.setFont (juce::Font(juce::FontOptions{}.withHeight(10.0f).withStyle("Bold")));
     evolveLabel.setColour (juce::Label::textColourId, EvolveColours::muted);
     addAndMakeVisible (evolveLabel);
 
@@ -147,7 +147,7 @@ void EvolveEditor::setupLeftPanel()
     evolveBtn.onClick = [this]{ evolveSelected(); };
     addAndMakeVisible (evolveBtn);
 
-    statusLabel.setFont (juce::Font (10.0f));
+    statusLabel.setFont (juce::Font(juce::FontOptions{}.withHeight(10.0f)));
     statusLabel.setColour (juce::Label::textColourId, EvolveColours::muted);
     setStatus ("Set loop region in Ableton and click CAPTURE LOOP");
     addAndMakeVisible (statusLabel);
@@ -156,7 +156,7 @@ void EvolveEditor::setupLeftPanel()
 //==============================================================================
 void EvolveEditor::setupTree()
 {
-    treeLabel.setFont (juce::Font (10.0f, juce::Font::bold));
+    treeLabel.setFont (juce::Font(juce::FontOptions{}.withHeight(10.0f).withStyle("Bold")));
     treeLabel.setColour (juce::Label::textColourId, EvolveColours::muted);
     addAndMakeVisible (treeLabel);
 
@@ -173,12 +173,12 @@ void EvolveEditor::setupApiKeyOverlay()
     addAndMakeVisible (apiKeyOverlay);
 
     apiKeyTitle.setText ("EVOLVE", juce::dontSendNotification);
-    apiKeyTitle.setFont (juce::Font (28.0f, juce::Font::bold));
+    apiKeyTitle.setFont (juce::Font(juce::FontOptions{}.withHeight(28.0f).withStyle("Bold")));
     apiKeyTitle.setColour (juce::Label::textColourId, EvolveColours::accent);
     apiKeyTitle.setJustificationType (juce::Justification::centred);
     apiKeyOverlay.addAndMakeVisible (apiKeyTitle);
 
-    apiKeyLabel.setFont (juce::Font (12.0f));
+    apiKeyLabel.setFont (juce::Font(juce::FontOptions{}.withHeight(12.0f)));
     apiKeyLabel.setColour (juce::Label::textColourId, EvolveColours::muted);
     apiKeyLabel.setJustificationType (juce::Justification::centred);
     apiKeyLabel.setText ("Enter your Anthropic API key to get started.\nGet one free at console.anthropic.com",
@@ -190,7 +190,7 @@ void EvolveEditor::setupApiKeyOverlay()
     apiKeyEditor.setColour (juce::TextEditor::textColourId,           EvolveColours::text);
     apiKeyEditor.setColour (juce::TextEditor::outlineColourId,        EvolveColours::border);
     apiKeyEditor.setColour (juce::TextEditor::focusedOutlineColourId, EvolveColours::accent);
-    apiKeyEditor.setFont (juce::Font (12.0f));
+    apiKeyEditor.setFont (juce::Font(juce::FontOptions{}.withHeight(12.0f)));
     apiKeyEditor.setTextToShowWhenEmpty ("sk-ant-...", EvolveColours::muted);
     apiKeyOverlay.addAndMakeVisible (apiKeyEditor);
 
@@ -534,7 +534,7 @@ void EvolveEditor::rebuildTree()
         auto empty = std::make_unique<juce::Label> (juce::String{},
             "Record your loop from Ableton and plant it as a seed.\n"
             "Then click EVOLVE SELECTED to generate variations.");
-        empty->setFont (juce::Font (12.0f));
+        empty->setFont (juce::Font(juce::FontOptions{}.withHeight(12.0f)));
         empty->setColour (juce::Label::textColourId, EvolveColours::muted);
         empty->setJustificationType (juce::Justification::centred);
         empty->setBounds (20, 60, treeContainer.getWidth()-40, 80);
@@ -552,7 +552,7 @@ void EvolveEditor::rebuildTree()
         if (i > 0)
         {
             auto conn = std::make_unique<juce::Label> (juce::String{}, "-> " + gen.param.toUpperCase());
-            conn->setFont (juce::Font (9.0f));
+            conn->setFont (juce::Font(juce::FontOptions{}.withHeight(9.0f)));
             conn->setColour (juce::Label::textColourId, EvolveColours::muted);
             conn->setBounds (8, y, 200, 14);
             treeContainer.addAndMakeVisible (*conn);
