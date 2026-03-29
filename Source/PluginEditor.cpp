@@ -22,7 +22,7 @@ EvolveEditor::EvolveEditor (EvolveProcessor& p)
     updateApiKeyVisibility();
 
     processor.addChangeListener (this);
-    startTimer (2000);
+    startTimer (200);   // poll for auto-capture and BPM updates
 }
 
 EvolveEditor::~EvolveEditor()
@@ -83,32 +83,9 @@ void EvolveEditor::setupLeftPanel()
     captureInfo.setFont (juce::Font(juce::FontOptions{}.withHeight(10.0f)));
     captureInfo.setColour (juce::Label::textColourId, EvolveColours::muted);
     captureInfo.setJustificationType (juce::Justification::centred);
-    captureInfo.setText ("Set loop region in Ableton, then click CAPTURE LOOP",
+    captureInfo.setText ("Loop a section in your DAW — seed loads automatically",
                          juce::dontSendNotification);
     addAndMakeVisible (captureInfo);
-
-    captureBtn.setColour (juce::TextButton::buttonColourId,  EvolveColours::raised);
-    captureBtn.setColour (juce::TextButton::textColourOffId, EvolveColours::orange);
-    captureBtn.onClick = [this]
-    {
-        if (isCapturing)
-        {
-            processor.stopCapture();
-            isCapturing = false;
-            captureBtn.setButtonText ("CAPTURE LOOP");
-            setStatus ("Capture stopped");
-        }
-        else
-        {
-            processor.startCapture();
-            isCapturing = true;
-            captureBtn.setButtonText ("STOP CAPTURE");
-            captureInfo.setText ("Playing loop in Ableton? Notes are being captured...",
-                                 juce::dontSendNotification);
-            setStatus ("Recording — play your loop in Ableton now...");
-        }
-    };
-    addAndMakeVisible (captureBtn);
 
     hearSeedBtn.setEnabled (false);
     hearSeedBtn.setColour (juce::TextButton::buttonColourId,  EvolveColours::raised);
@@ -149,7 +126,7 @@ void EvolveEditor::setupLeftPanel()
 
     statusLabel.setFont (juce::Font(juce::FontOptions{}.withHeight(10.0f)));
     statusLabel.setColour (juce::Label::textColourId, EvolveColours::muted);
-    setStatus ("Set loop region in Ableton and click CAPTURE LOOP");
+    setStatus ("Loop a section in your DAW to capture seed notes");
     addAndMakeVisible (statusLabel);
 }
 
@@ -267,13 +244,12 @@ void EvolveEditor::resized()
     seedRoll.setBounds    (pad, 64,  leftW-pad*2, 64);
     captureInfo.setBounds (pad, 130, leftW-pad*2, 28);
 
-    const int capRow = 160;
-    const int capBtnW = leftW - pad*2 - 62;
-    captureBtn.setBounds  (pad,              capRow, capBtnW, 26);
-    hearSeedBtn.setBounds (pad + capBtnW + 2, capRow, 28,     26);
-    plantBtn.setBounds    (pad + capBtnW + 32, capRow, 30,    26);
+    const int seedBtnRow = 160;
+    const int seedBtnW   = leftW - pad*2 - 34;
+    plantBtn.setBounds    (pad,                seedBtnRow, seedBtnW, 26);
+    hearSeedBtn.setBounds (pad + seedBtnW + 2, seedBtnRow, 32,      26);
 
-    seedDivY = capRow + 34;
+    seedDivY = seedBtnRow + 34;
 
     // Evolve section
     evolveLabel.setBounds (pad, seedDivY + 6, leftW-pad*2, 16);
@@ -314,50 +290,50 @@ void EvolveEditor::resized()
 void EvolveEditor::timerCallback()
 {
     bpmSlider.setValue (processor.bpm, juce::dontSendNotification);
+    checkForAutoCapture();
+}
+
+//==============================================================================
+void EvolveEditor::checkForAutoCapture()
+{
+    if (!processor.hasFreshCapture()) return;
+    processor.clearFreshCapture();
+
+    const auto json   = processor.getCapturedNotesJSON();
+    const auto parsed = juce::JSON::parse (json);
+    NoteList   notes;
+
+    if (auto* arr = parsed.getArray())
+    {
+        for (const auto& item : *arr)
+        {
+            Note n;
+            n.pitch = (int)   item["pitch"];
+            n.beat  = (double)item["beat"];
+            n.dur   = (double)item["dur"];
+            if (n.pitch > 0 && n.dur > 0) notes.push_back (n);
+        }
+    }
+
+    if (notes.empty()) return;
+
+    seedNotes = notes;
+    seedRoll.setNotes (notes);
+    captureInfo.setText (juce::String (notes.size()) + " notes captured",
+                         juce::dontSendNotification);
+    captureInfo.setColour (juce::Label::textColourId, EvolveColours::accent);
+    hearSeedBtn.setEnabled (true);
+    plantBtn.setEnabled (true);
+    setStatus (juce::String (notes.size()) + " notes captured — click PLANT SEED");
 }
 
 //==============================================================================
 void EvolveEditor::changeListenerCallback (juce::ChangeBroadcaster*)
 {
-    if (!processor.isCapturing() && isCapturing)
-    {
-        isCapturing = false;
-        captureBtn.setButtonText ("CAPTURE LOOP");
-
-        const auto json   = processor.getCapturedNotesJSON();
-        const auto parsed = juce::JSON::parse (json);
-        NoteList   notes;
-
-        if (auto* arr = parsed.getArray())
-        {
-            for (const auto& item : *arr)
-            {
-                Note n;
-                n.pitch = (int)   item["pitch"];
-                n.beat  = (double)item["beat"];
-                n.dur   = (double)item["dur"];
-                if (n.pitch > 0 && n.dur > 0) notes.push_back (n);
-            }
-        }
-
-        if (notes.empty())
-        {
-            captureInfo.setText ("No notes found. Make sure Ableton loop is playing.",
-                                 juce::dontSendNotification);
-            setStatus ("No notes captured");
-        }
-        else
-        {
-            seedNotes = notes;
-            seedRoll.setNotes (notes);
-            captureInfo.setText (juce::String (notes.size()) + " notes captured — click PLANT SEED",
-                                 juce::dontSendNotification);
-            captureInfo.setColour (juce::Label::textColourId, EvolveColours::accent);
-            hearSeedBtn.setEnabled (true);
-            plantBtn.setEnabled (true);
-            setStatus (juce::String (notes.size()) + " notes captured");
-        }
-    }
+    // The change message is now used as a hint that fresh capture is available.
+    // The actual check happens in timerCallback via checkForAutoCapture(),
+    // which is safe to call from the message thread.
+    checkForAutoCapture();
 }
 
 //==============================================================================
@@ -524,7 +500,7 @@ juce::String EvolveEditor::getLineageDesc (const juce::String& id)
 void EvolveEditor::rebuildTree()
 {
     genCards.clear();
-    treeLabels.clear();   // delete owned labels before removing from parent
+    treeLabels.clear();
     treeContainer.removeAllChildren();
 
     int y = 8;
@@ -532,8 +508,8 @@ void EvolveEditor::rebuildTree()
     if (generations.empty())
     {
         auto empty = std::make_unique<juce::Label> (juce::String{},
-            "Record your loop from Ableton and plant it as a seed.\n"
-            "Then click EVOLVE SELECTED to generate variations.");
+            "Loop a section in your DAW to capture notes.\n"
+            "Then click PLANT SEED and EVOLVE SELECTED.");
         empty->setFont (juce::Font(juce::FontOptions{}.withHeight(12.0f)));
         empty->setColour (juce::Label::textColourId, EvolveColours::muted);
         empty->setJustificationType (juce::Justification::centred);
