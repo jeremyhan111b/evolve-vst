@@ -48,7 +48,8 @@ namespace MusicTheory
         if (trimmed.length() >= 2 && (trimmed[1] == '#' || trimmed[1] == 'b'))
         {
             auto key = trimmed.substring (0, 2);
-            if (flatMap.count (key)) pc = flatMap.at (key);
+            auto keyStd = key.toStdString();
+            if (flatMap.count (keyStd)) pc = flatMap.at (keyStd);
             else
             {
                 auto idx = NOTE_NAMES.indexOf (key);
