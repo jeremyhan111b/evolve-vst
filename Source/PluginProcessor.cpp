@@ -32,7 +32,7 @@ void EvolveProcessor::processBlock (juce::AudioBuffer<float>& audio, juce::MidiB
             isPlaying = pos->getIsPlaying();
             isLooping = pos->getIsLooping();
 
-            if (auto b = pos->getBpm())           bpm       = *b;
+            if (auto b = pos->getBpm())           bpm         = *b;
             if (auto p = pos->getPpqPosition())   currentBeat = *p;
 
             if (auto loop = pos->getLoopPoints())
@@ -45,8 +45,85 @@ void EvolveProcessor::processBlock (juce::AudioBuffer<float>& audio, juce::MidiB
 
     const double secondsPerBeat = 60.0 / bpm;
 
-    // ── MIDI INPUT CAPTURE ──
-    if (capturing.load())
+    // ── LOOP DETECTION ──
+    // Detect when playhead jumps backwards (loop restart) while looping & playing.
+    // When this happens, the pending notes from the previous pass become the
+    // captured notes, and we start collecting a fresh pass.
+    if (isPlaying && isLooping)
+    {
+        const bool loopRestarted = (prevBeat > 0.0 && currentBeat < prevBeat - 0.5);
+
+        if (loopRestarted)
+        {
+            juce::ScopedLock lock (noteLock);
+
+            // Close any held notes from the previous pass
+            for (auto& kv : activeNotes)
+            {
+                const double dur = prevBeat - kv.second.startBeat;
+                if (dur > 0.0)
+                {
+                    pendingNotes.push_back ({
+                        kv.first,
+                        std::max (0.0, kv.second.startBeat - loopStart),
+                        std::max (0.0625, dur)
+                    });
+                }
+            }
+            activeNotes.clear();
+
+            // If we collected notes during this pass, promote them
+            if (!pendingNotes.empty())
+            {
+                capturedNotes = pendingNotes;
+                freshCapture.store (true);
+                sendChangeMessage();  // notify editor
+            }
+
+            // Start fresh for the next pass
+            pendingNotes.clear();
+        }
+
+        prevBeat = currentBeat;
+    }
+    else
+    {
+        // Not playing or not looping — reset tracking
+        if (wasPlaying && !isPlaying)
+        {
+            // Playback just stopped — if we have pending notes, capture them
+            juce::ScopedLock lock (noteLock);
+
+            // Close held notes
+            for (auto& kv : activeNotes)
+            {
+                const double dur = currentBeat - kv.second.startBeat;
+                if (dur > 0.0)
+                {
+                    pendingNotes.push_back ({
+                        kv.first,
+                        std::max (0.0, kv.second.startBeat - (isLooping ? loopStart : 0.0)),
+                        std::max (0.0625, dur)
+                    });
+                }
+            }
+            activeNotes.clear();
+
+            if (!pendingNotes.empty())
+            {
+                capturedNotes = pendingNotes;
+                freshCapture.store (true);
+                sendChangeMessage();
+            }
+            pendingNotes.clear();
+        }
+
+        prevBeat = -1.0;
+    }
+    wasPlaying = isPlaying;
+
+    // ── MIDI INPUT — ALWAYS LISTENING ──
+    if (isPlaying)
     {
         for (auto meta : midi)
         {
@@ -59,7 +136,7 @@ void EvolveProcessor::processBlock (juce::AudioBuffer<float>& audio, juce::MidiB
             {
                 const int pitch = msg.getNoteNumber();
                 // Only capture notes within loop region if looping
-                if (!isLooping || (noteBeat >= loopStart && noteBeat < loopEnd))
+                if (!isLooping || (noteBeat >= loopStart - 0.1 && noteBeat < loopEnd + 0.1))
                 {
                     juce::ScopedLock lock (noteLock);
                     activeNotes[pitch] = { noteBeat };
@@ -69,15 +146,14 @@ void EvolveProcessor::processBlock (juce::AudioBuffer<float>& audio, juce::MidiB
             {
                 const int pitch = msg.getNoteNumber();
                 juce::ScopedLock lock (noteLock);
-                if (activeNotes.count(pitch))
+                if (activeNotes.count (pitch))
                 {
                     const double startBeat = activeNotes[pitch].startBeat;
                     const double dur       = noteBeat - startBeat;
                     if (dur > 0.0)
                     {
-                        // Normalise to loop start
-                        const double offset = isLooping ? loopStart : startBeat;
-                        capturedNotes.push_back ({
+                        const double offset = isLooping ? loopStart : 0.0;
+                        pendingNotes.push_back ({
                             pitch,
                             std::max (0.0, startBeat - offset),
                             std::max (0.0625, dur)
@@ -127,34 +203,6 @@ void EvolveProcessor::processBlock (juce::AudioBuffer<float>& audio, juce::MidiB
 }
 
 //==============================================================================
-void EvolveProcessor::startCapture()
-{
-    juce::ScopedLock lock (noteLock);
-    capturedNotes.clear();
-    activeNotes.clear();
-    capturing.store (true);
-}
-
-void EvolveProcessor::stopCapture()
-{
-    // Close any held notes
-    {
-        juce::ScopedLock lock (noteLock);
-        for (auto& kv : activeNotes)
-        {
-            const double offset = isLooping ? loopStart : kv.second.startBeat;
-            capturedNotes.push_back ({
-                kv.first,
-                std::max (0.0, kv.second.startBeat - offset),
-                0.25
-            });
-        }
-        activeNotes.clear();
-    }
-    capturing.store (false);
-    sendChangeMessage(); // notify editor
-}
-
 juce::String EvolveProcessor::getCapturedNotesJSON() const
 {
     juce::ScopedLock lock (const_cast<juce::CriticalSection&>(noteLock));
@@ -175,7 +223,6 @@ juce::String EvolveProcessor::getCapturedNotesJSON() const
 //==============================================================================
 void EvolveProcessor::scheduleNotesForPlayback (const juce::String& notesJSON, double playBpm)
 {
-    // Parse JSON array of {pitch, beat, dur}
     auto parsed = juce::JSON::parse (notesJSON);
     if (auto* arr = parsed.getArray())
     {
@@ -224,7 +271,8 @@ void EvolveProcessor::callAnthropic (const juce::String& requestJSON,
 
         try
         {
-            juce::Logger::writeToLog ("EVOLVE callAnthropic: key length=" + juce::String(key.length()) + " payload length=" + juce::String(requestJSON.length()));
+            juce::Logger::writeToLog ("EVOLVE callAnthropic: key length=" + juce::String(key.length())
+                                      + " payload length=" + juce::String(requestJSON.length()));
 
             auto opts = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inPostData)
                 .withExtraHeaders ("x-api-key: " + key + "\r\n"
